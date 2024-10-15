@@ -1,0 +1,151 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-service
+  namespace: prometheus
+spec:
+  ports:
+    - name: prometheus-port
+      port: 9090
+      protocol: TCP
+      targetPort: 9090
+  selector:
+    app: prometheus
+  type: NodePort
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-state-metrics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-state-metrics
+subjects:
+- kind: ServiceAccount
+  name: kube-state-metrics
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-state-metrics
+rules:
+- apiGroups:
+  - ""
+  resources: ["configmaps", "secrets", "nodes", "pods", "services", "resourcequotas", "replicationcontrollers", "limitranges", "persistentvolumeclaims", "persistentvolumes", "namespaces", "endpoints"]
+  verbs: ["list","watch"]
+- apiGroups:
+  - extensions
+  resources: ["daemonsets", "deployments", "replicasets", "ingresses"]
+  verbs: ["list", "watch"]
+- apiGroups:
+  - apps
+  resources: ["statefulsets", "daemonsets", "deployments", "replicasets"]
+  verbs: ["list", "watch"]
+- apiGroups:
+  - batch
+  resources: ["cronjobs", "jobs"]
+  verbs: ["list", "watch"]
+- apiGroups:
+  - autoscaling
+  resources: ["horizontalpodautoscalers"]
+  verbs: ["list", "watch"]
+- apiGroups:
+  - authentication.k8s.io
+  resources: ["tokenreviews"]
+  verbs: ["create"]
+- apiGroups:
+  - authorization.k8s.io
+  resources: ["subjectaccessreviews"]
+  verbs: ["create"]
+- apiGroups:
+  - policy
+  resources: ["poddisruptionbudgets"]
+  verbs: ["list", "watch"]
+- apiGroups:
+  - certificates.k8s.io
+  resources: ["certificatesigningrequests"]
+  verbs: ["list", "watch"]
+- apiGroups:
+  - storage.k8s.io
+  resources: ["storageclasses", "volumeattachments"]
+  verbs: ["list", "watch"]
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources: ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
+  verbs: ["list", "watch"]
+- apiGroups:
+  - networking.k8s.io
+  resources: ["networkpolicies"]
+  verbs: ["list", "watch"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-deploy
+  namespace: prometheus
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+        - name: prometheus
+          image: registry.cn-beijing.aliyuncs.com/wilsonchai/prometheus:v2.54.1
+          args:
+            - "--storage.tsdb.retention.time=12h"
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus/"
+            - --web.enable-lifecycle
+          ports:
+            - containerPort: 9090
+          resources:
+            requests:
+              cpu: 500m
+              memory: 500M
+            limits:
+              cpu: 1
+              memory: 1Gi
+          volumeMounts:
+            - name: prometheus-config
+              mountPath: /etc/prometheus/
+      volumes:
+        - name: prometheus-config
+          configMap:
+            defaultMode: 420
+            name: prometheus-cm
+---
+apiVersion: v1                              
+kind: ConfigMap                      
+metadata:                  
+  name: prometheus-cm
+  labels:                                           
+    name: prometheus-cm
+  namespace: prometheus                  
+data:                  
+  prometheus.yml: |- 
+    global:                                                                                                       
+      scrape_interval: 5s                                                                                         
+      evaluation_interval: 5s   
+                      
+    alerting:             
+      alertmanagers:                    
+        - static_configs:                                                                                         
+            - targets: ['alertmanager:9093']
+                                                                                                                  
+    rule_files:            
+      - /etc/prometheus/*.rules
+                                                    
+    scrape_configs:                                      
+      - job_name: 'prometheus'           
+        static_configs:
+        - targets: ['localhost:9090']                                                                             
+                                                                                                                  
