@@ -99,18 +99,18 @@ check_args()
 check_image_exists()
 {
     if docker image inspect "$IMAGE" > /dev/null 2>&1; then
-        check_image_exists_return="镜像 $IMAGE 已存在"
+        echo "镜像 $IMAGE 已存在"
     else
-        check_image_exists_return="镜像 $IMAGE_NAME 不存在，拉取中..."
+        echo "镜像 $IMAGE_NAME 不存在，拉取中..."
         docker pull "$IMAGE"
     fi
 }
 
+>$LOG_FILE
 check_args
 echo "================"
 
 check_image_exists
-echo $check_image_exists_return > $LOG_FILE 2>&1
 mkdir -p $BASE_DIR/conf $BASE_DIR/data
 
 for count in $(seq 1 $REDIS_NUM)
