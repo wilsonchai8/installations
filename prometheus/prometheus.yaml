@@ -135,3 +135,14 @@ data:
           action: replace
         - action: labelmap
           regex: __meta_kubernetes_node_label_(.+)
+  prometheus.rules: |-
+    groups:
+    - name: test alert
+      rules:
+      - alert: deployment replicas is 0
+        expr: kube_deployment_spec_replicas == 0
+        for: 30s
+        labels:
+          severity: slack
+        annotations:
+          summary: deployment replicas is 0
