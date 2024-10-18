@@ -121,6 +121,13 @@ data:
         static_configs:  
           - targets: ["kube-state-metrics.kube-system:8080"]                                                                                                                   
 
+      - job_name: pushgateway
+        honor_labels: true
+        static_configs:
+        - targets: ['10.22.11.156:9091']
+          labels:
+            instance: pushgateway
+
       - job_name: 'kubernetes-nodes'              
         tls_config:
           ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
