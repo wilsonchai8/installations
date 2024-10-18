@@ -15,7 +15,10 @@ spec:
     spec:
       serviceAccountName: kube-state-metrics
       containers:
-      - name: kube-state-metrics
+      - args:
+        - --metric-labels-allowlist=pods=[*]
+        - --metric-annotations-allowlist=pods=[*]
+        name: kube-state-metrics
         image: registry.cn-beijing.aliyuncs.com/wilsonchai/kube-state-metrics:v2.13.0
         ports:
         - containerPort: 8080
