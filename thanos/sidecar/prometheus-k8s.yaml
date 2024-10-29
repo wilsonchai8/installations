@@ -1,0 +1,151 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - nodes/proxy
+  - nodes/metrics
+  - services
+  - endpoints
+  - pods
+  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - extensions
+  resources:
+  - ingresses
+  verbs: ["get", "list", "watch"]
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: prometheus
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-service
+  namespace: prometheus
+spec:
+  ports:
+    - name: prometheus-port
+      port: 9090
+      protocol: TCP
+      targetPort: 9090
+  selector:
+    app: prometheus
+  type: NodePort
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-deploy
+  namespace: prometheus
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+        - name: prometheus
+          image: registry.cn-beijing.aliyuncs.com/wilsonchai/prometheus:v2.54.1
+          args:
+            - "--storage.tsdb.retention.time=12h"
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus/"
+            - --web.enable-lifecycle
+          ports:
+            - containerPort: 9090
+          resources:
+            requests:
+              cpu: 500m
+              memory: 500M
+            limits:
+              cpu: 1
+              memory: 1Gi
+          volumeMounts:
+            - name: prometheus-config
+              mountPath: /etc/prometheus/
+            - name: prometheus-data
+              mountPath: /prometheus
+        # 新增thanos-sidecar
+        - name: thanos
+          image: registry.cn-beijing.aliyuncs.com/wilsonchai/thanos:0.36.1
+          args:
+            - "sidecar"
+            - "--prometheus.url=http://localhost:9090"
+            - "--tsdb.path=/prometheus"
+          volumeMounts:
+            - name: prometheus-data
+              mountPath: /prometheus
+        # 新增结束
+      volumes:
+        - name: prometheus-config
+          configMap:
+            defaultMode: 420
+            name: prometheus-cm
+        - emptyDir: {}
+          name: prometheus-data
+
+---
+apiVersion: v1                              
+kind: ConfigMap                      
+metadata:                  
+  name: prometheus-cm
+  labels:                                           
+    name: prometheus-cm
+  namespace: prometheus                  
+data:                  
+  prometheus.yml: |- 
+    global:                                                                                                       
+      scrape_interval: 5s                                                                                         
+      evaluation_interval: 5s   
+
+      # 新增外部标签
+      external_labels:
+        cluster: "prometheus-k8s"
+      # 新增结束
+
+    scrape_configs:                                      
+      - job_name: 'prometheus'           
+        static_configs:
+        - targets: ['localhost:9090']                                                                             
+
+      - job_name: "prometheus-kube-state-metrics"
+        static_configs:  
+          - targets: ["kube-state-metrics.kube-system:8080"]                                                                                                                   
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: thanos-sidecar-service
+  namespace: prometheus
+spec:
+  ports:
+    - name: thanos-sidecar-port
+      port: 10901
+      protocol: TCP
+      targetPort: 10901
+  selector:
+    app: prometheus
+  type: NodePort
+
